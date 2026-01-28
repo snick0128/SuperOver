@@ -7,7 +7,7 @@ from itertools import combinations_with_replacement
 # ================== TELEGRAM CONFIG ==================
 API_ID = 1441531
 API_HASH = "6e5c383bb1a3e68f7f2b435ced717a55"
-SESSION = "prateek"
+SESSION = "nick"
 
 client = TelegramClient(SESSION, API_ID, API_HASH)
 
@@ -121,3 +121,4 @@ async def play_over(event):
 print("🤖 BOT RUNNING")
 client.start()
 client.run_until_disconnected()
+
