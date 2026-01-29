@@ -148,20 +148,44 @@ async def fix_over(event):
 
 @client.on(events.NewMessage(pattern=r'(?i)/over'))
 async def play_over(event):
-    if not await is_admin(event): return
+    if not await is_admin(event):
+        return
 
-    if len(ilist) < 6:
+    if not ilist:
         flogic(random.randint(6, 23))
 
-    random.shuffle(ilist)
-    balls = ilist[:6]
+    legal_balls = 0
+    ball_no = 1
+    total_runs = 0
 
-    for i in range(6):
-        await event.reply(f"𝐁𝐚𝐥𝐥 0.{i+1} 🎾 {balls[i]}")
+    for outcome in ilist:
+        # extra runs
+        if "Wide" in outcome or "No ball" in outcome:
+            total_runs += 1
+            await event.reply(f"𝐁𝐚𝐥𝐥 0.{ball_no}  {outcome}")
+            await asyncio.sleep(1)
+            continue  # ⚠️ does NOT consume ball
+
+        # normal runs
+        if "1 run" in outcome: total_runs += 1
+        elif "2 run" in outcome: total_runs += 2
+        elif "3 run" in outcome: total_runs += 3
+        elif "4 run" in outcome: total_runs += 4
+        elif "6 run" in outcome: total_runs += 6
+
+        await event.reply(f"𝐁𝐚𝐥𝐥 0.{ball_no}  {outcome}")
         await asyncio.sleep(1)
 
-    runs = calculate_runs(balls)
-    await event.reply(f"📊 SCORECARD\n\nTHIS OVER: {runs} RUNS")
+        legal_balls += 1
+        ball_no += 1
+
+        if legal_balls == 6:
+            break
+
+    await event.reply(
+        f"📊 SCORECARD\n\nTHIS OVER: {total_runs} RUNS"
+    )
+
 
 # ================== START ==================
 print("🤖 BOT RUNNING")
@@ -174,4 +198,5 @@ else:
     print("\n📋 No stored groups yet")
 client.start()
 client.run_until_disconnected()
+
 
