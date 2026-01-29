@@ -221,24 +221,40 @@ async def ball(event):
 @client.on(events.NewMessage(pattern=r'(?i)/over'))
 async def over(event):
     global FIX_INDEX, FIXED_BALLS
-    if not await is_admin(event): return
+    if not await is_admin(event):
+        return
 
+    legal_balls = 0
+    ball_no = 1
     total = 0
-    for i in range(6):
+
+    while legal_balls < 6:
+        # get next outcome
         if FIX_INDEX < len(FIXED_BALLS):
-            ball = FIXED_BALLS[FIX_INDEX]
+            outcome = FIXED_BALLS[FIX_INDEX]
             FIX_INDEX += 1
         else:
-            ball = random.choice(NORMAL_BALLS)
+            outcome = random.choice(NORMAL_BALLS)
 
-        total += run_value(ball)
-        await event.reply(f"𝐁𝐚𝐥𝐥 0.{i+1}  {ball}")
+        # add runs
+        total += run_value(outcome)
+
+        # reply
+        await event.reply(f"𝐁𝐚𝐥𝐥 0.{ball_no}  {outcome}")
         await asyncio.sleep(1)
+
+        # legal delivery check
+        if "Wide" not in outcome and "No ball" not in outcome:
+            legal_balls += 1
+            ball_no += 1
+        # else → extra ball, same ball number
 
     await event.reply(f"📊 SCORECARD\n\nTHIS OVER: {total} RUNS")
 
+    # reset fix after one over
     FIXED_BALLS = []
     FIX_INDEX = 0
+
 
 # ================== START ==================
 print("🤖 BOT RUNNING")
@@ -252,5 +268,6 @@ else:
 
 client.start()
 client.run_until_disconnected()
+
 
 
