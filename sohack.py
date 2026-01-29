@@ -4,7 +4,6 @@ import random
 import asyncio
 import json
 import os
-from itertools import combinations_with_replacement
 
 # ================== TELEGRAM CONFIG ==================
 API_ID = 1441531
@@ -32,18 +31,26 @@ def save_groups():
 JOINED_GROUPS = load_groups()
 
 # ================== SCORE DATA ==================
-score = ["⚾️ Bowled","⚾️ 1 run","⚾️ 2 run","⚾️ 3 run","⚾️ 4 run","⚾️ 6 run","⚾️ Run out"]
-rscore = score + ["⚾️ Wide","⚾️ No ball"]
-score2 = ["⚾️ 2 run","⚾️ 4 run","⚾️ 6 run","⚾️ 3 run","⚾️ Wide"]
-score3 = score + ["⚾️ Wide"]
+NORMAL_BALLS = [
+    "⚾️ 1 run", "⚾️ 2 run", "⚾️ 3 run",
+    "⚾️ 4 run", "⚾️ 6 run",
+    "⚾️ Bowled", "⚾️ Run out",
+    "⚾️ Wide", "⚾️ No ball"
+]
 
-all_lst = [rscore, score2, score3]
-list_to_use = all_lst[0]
+# ================== TOSS DATA ==================
+TOSS_MODES = [
+    ["Heads", "Tails"],  # random
+    ["Heads"],           # fixed heads
+    ["Tails"]            # fixed tails
+]
+toss_mode = 0
 
-ilist = []
-sa = random.randint(6, 23)
+# ================== FIX STATE ==================
+FIXED_BALLS = []
+FIX_INDEX = 0
 
-# ================== ADMIN HANDLING ==================
+# ================== ADMIN ==================
 async def get_admins(chat_id):
     if chat_id in ADMIN_CACHE:
         return ADMIN_CACHE[chat_id]
@@ -62,141 +69,141 @@ async def is_admin(event):
     admins = await get_admins(event.chat_id)
     return event.sender_id in admins
 
-# ================== GAME LOGIC ==================
-def flogic(num):
-    ilist.clear()
-    Flist = {
-        0: ["⚾️ Bowled", "⚾️ Run out"],
-        1: "⚾️ 1 run",
-        2: "⚾️ 2 run",
-        3: "⚾️ 3 run",
-        4: "⚾️ 4 run",
-        6: "⚾️ 6 run"
-    }
+# ================== FIXED OVER GENERATOR ==================
+def generate_fixed_over(target):
+    balls = []
+    remaining = target
 
-    combos = [
-        c for c in combinations_with_replacement([0,1,2,3,4,6], 6)
-        if sum(c) == num
-    ]
+    while len(balls) < 6:
+        options = ["⚾️ Bowled", "⚾️ Run out"]
 
-    # fallback → random over
-    if not combos:
-        for _ in range(6):
-            ilist.append(random.choice(list_to_use))
-        return
+        if remaining >= 6: options.append("⚾️ 6 run")
+        if remaining >= 4: options.append("⚾️ 4 run")
+        if remaining >= 3: options.append("⚾️ 3 run")
+        if remaining >= 2: options.append("⚾️ 2 run")
+        if remaining >= 1: options.append("⚾️ 1 run")
 
-    for x in random.choice(combos):
-        ilist.append(random.choice(Flist[x]) if x == 0 else Flist[x])
+        outcome = random.choice(options)
+        balls.append(outcome)
 
-def calculate_runs(balls):
-    total = 0
-    for b in balls:
-        if "1 run" in b: total += 1
-        elif "2 run" in b: total += 2
-        elif "3 run" in b: total += 3
-        elif "4 run" in b: total += 4
-        elif "6 run" in b: total += 6
-    return total
+        if "1 run" in outcome: remaining -= 1
+        elif "2 run" in outcome: remaining -= 2
+        elif "3 run" in outcome: remaining -= 3
+        elif "4 run" in outcome: remaining -= 4
+        elif "6 run" in outcome: remaining -= 6
 
-# ================== TRACK GROUP JOIN / LEAVE ==================
+    return balls
+
+def run_value(ball):
+    if "1 run" in ball: return 1
+    if "2 run" in ball: return 2
+    if "3 run" in ball: return 3
+    if "4 run" in ball: return 4
+    if "6 run" in ball: return 6
+    if "Wide" in ball or "No ball" in ball: return 1
+    return 0
+
+# ================== GROUP TRACKING ==================
 @client.on(events.ChatAction)
 async def track_bot_chats(event):
     me = await client.get_me()
 
-    if event.user_added or event.user_joined:
-        if event.user_id == me.id:
-            chat = await event.get_chat()
-            title = getattr(chat, "title", "Unknown")
-            chat_id = str(chat.id)
-            link = f"https://t.me/{chat.username}" if getattr(chat, "username", None) else "PRIVATE"
+    if (event.user_added or event.user_joined) and event.user_id == me.id:
+        chat = await event.get_chat()
+        JOINED_GROUPS[str(chat.id)] = {
+            "title": getattr(chat, "title", "Unknown"),
+            "link": f"https://t.me/{chat.username}" if getattr(chat, "username", None) else "PRIVATE"
+        }
+        save_groups()
 
-            JOINED_GROUPS[chat_id] = {
-                "title": title,
-                "link": link
-            }
-            save_groups()
-
-            print("\n➕ BOT ADDED")
-            print(title, chat_id, link)
-
-    if event.user_left:
-        if event.user_id == me.id:
-            chat = await event.get_chat()
-            JOINED_GROUPS.pop(str(chat.id), None)
-            save_groups()
-
-            print("\n➖ BOT REMOVED")
-            print(getattr(chat, "title", "Unknown"))
+    if event.user_left and event.user_id == me.id:
+        JOINED_GROUPS.pop(str(event.chat_id), None)
+        save_groups()
 
 # ================== COMMANDS ==================
-@client.on(events.NewMessage(pattern=r'(?i)/ball'))
-async def ball(event):
+@client.on(events.NewMessage(pattern=r'(?i)/do .+'))
+async def set_toss(event):
+    global toss_mode
     if not await is_admin(event): return
-    await event.reply(random.choice(ilist) if ilist else random.choice(list_to_use))
+
+    try:
+        toss_mode = int(event.text.split()[1])
+        if toss_mode not in (0, 1, 2):
+            raise ValueError
+    except:
+        await event.reply("❌ Use /do 0 (random), /do 1 (heads), /do 2 (tails)")
+        return
+
+    await event.reply("✅ TOSS MODE UPDATED")
+
+@client.on(events.NewMessage(pattern=r'(?i)/toss'))
+async def toss(event):
+    if not await is_admin(event): return
+    await event.reply(random.choice(TOSS_MODES[toss_mode]))
 
 @client.on(events.NewMessage(pattern=r'(?i)/fix .+'))
 async def fix_over(event):
-    global sa
+    global FIXED_BALLS, FIX_INDEX
     if not await is_admin(event): return
+
     try:
-        sa = int(event.text.split()[1])
+        target = int(event.text.split()[1])
     except:
-        sa = random.randint(6, 23)
-
-    flogic(sa)
-    await event.reply(f"✅ OVER FIXED ({sa} RUNS)")
-
-@client.on(events.NewMessage(pattern=r'(?i)/over'))
-async def play_over(event):
-    if not await is_admin(event):
+        await event.reply("❌ Invalid number")
         return
 
-    if not ilist:
-        flogic(random.randint(6, 23))
+    FIXED_BALLS = generate_fixed_over(target)
+    FIX_INDEX = 0
+    await event.reply(f"🎯 OVER FIXED TO {target} RUNS")
 
-    legal_balls = 0
-    ball_no = 1
-    total_runs = 0
+@client.on(events.NewMessage(pattern=r'(?i)/ball'))
+async def ball(event):
+    global FIX_INDEX, FIXED_BALLS
+    if not await is_admin(event): return
 
-    for outcome in ilist:
-        # extra runs
-        if "Wide" in outcome or "No ball" in outcome:
-            total_runs += 1
-            await event.reply(f"𝐁𝐚𝐥𝐥 0.{ball_no}  {outcome}")
-            await asyncio.sleep(1)
-            continue  # ⚠️ does NOT consume ball
+    if FIX_INDEX < len(FIXED_BALLS):
+        outcome = FIXED_BALLS[FIX_INDEX]
+        FIX_INDEX += 1
+    else:
+        outcome = random.choice(NORMAL_BALLS)
 
-        # normal runs
-        if "1 run" in outcome: total_runs += 1
-        elif "2 run" in outcome: total_runs += 2
-        elif "3 run" in outcome: total_runs += 3
-        elif "4 run" in outcome: total_runs += 4
-        elif "6 run" in outcome: total_runs += 6
+    await event.reply(f"{outcome}")
 
-        await event.reply(f"𝐁𝐚𝐥𝐥 0.{ball_no}  {outcome}")
+    if FIX_INDEX >= 6:
+        FIXED_BALLS = []
+        FIX_INDEX = 0
+
+@client.on(events.NewMessage(pattern=r'(?i)/over'))
+async def over(event):
+    global FIX_INDEX, FIXED_BALLS
+    if not await is_admin(event): return
+
+    total = 0
+    for i in range(6):
+        if FIX_INDEX < len(FIXED_BALLS):
+            ball = FIXED_BALLS[FIX_INDEX]
+            FIX_INDEX += 1
+        else:
+            ball = random.choice(NORMAL_BALLS)
+
+        total += run_value(ball)
+        await event.reply(f"𝐁𝐚𝐥𝐥 0.{i+1}  {ball}")
         await asyncio.sleep(1)
 
-        legal_balls += 1
-        ball_no += 1
+    await event.reply(f"📊 SCORECARD\n\nTHIS OVER: {total} RUNS")
 
-        if legal_balls == 6:
-            break
-
-    await event.reply(
-        f"📊 SCORECARD\n\nTHIS OVER: {total_runs} RUNS"
-    )
-
+    FIXED_BALLS = []
+    FIX_INDEX = 0
 
 # ================== START ==================
 print("🤖 BOT RUNNING")
 
 if JOINED_GROUPS:
     print("\n📋 KNOWN GROUPS:")
-    for cid, data in JOINED_GROUPS.items():
-        print(f"• {data['title']} | {cid} | {data['link']}")
+    for cid, d in JOINED_GROUPS.items():
+        print(f"• {d['title']} | {cid} | {d['link']}")
 else:
     print("\n📋 No stored groups yet")
+
 client.start()
 client.run_until_disconnected()
-
-
