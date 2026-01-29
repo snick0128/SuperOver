@@ -79,6 +79,29 @@ def flogic(num):
     for x in random.choice(combos):
         ilist.append(random.choice(Flist[x]) if x == 0 else Flist[x])
 
+# ================== Joined Chats ==================
+async def log_joined_chats():
+    print("\n📋 BOT JOINED CHATS:\n")
+
+    async for dialog in client.iter_dialogs():
+        entity = dialog.entity
+
+        if dialog.is_group or dialog.is_channel:
+            title = dialog.name
+            chat_id = entity.id
+
+            # public link if exists
+            if getattr(entity, "username", None):
+                link = f"https://t.me/{entity.username}"
+            else:
+                link = "🔒 Private / No public link"
+
+            print(f"• {title}")
+            print(f"  ID   : {chat_id}")
+            print(f"  LINK : {link}\n")
+
+    print("✅ CHAT LIST LOGGED\n")
+
 
 # ================== COMMANDS ==================
 @client.on(events.NewMessage(pattern='(?i)/set .+'))
@@ -132,8 +155,10 @@ async def play_over(event):
 
 # ================== START ==================
 print("🤖 BOT RUNNING")
-client.start()
-client.run_until_disconnected()
+with client:
+    client.loop.run_until_complete(log_joined_chats())
+    client.run_until_disconnected()
+
 
 
 
