@@ -70,8 +70,15 @@ def flogic(num):
         if sum(c) == num
     ]
 
+    # ✅ fallback if no valid fixed over exists
+    if not combos:
+        for _ in range(6):
+            ilist.append(random.choice(list_to_use))
+        return
+
     for x in random.choice(combos):
         ilist.append(random.choice(Flist[x]) if x == 0 else Flist[x])
+
 
 # ================== COMMANDS ==================
 @client.on(events.NewMessage(pattern='(?i)/set .+'))
@@ -108,20 +115,26 @@ async def fix_over(event):
 
 @client.on(events.NewMessage(pattern=r'(?i)/over'))
 async def play_over(event):
-    if not await is_admin(event): return
+    if not await is_admin(event):
+        return
+
+    if len(ilist) < 6:
+        flogic(random.randint(6, 23))
+
     random.shuffle(ilist)
+
     for i in range(6):
         await event.reply(f"𝐁𝐚𝐥𝐥 0.{i+1} 🎾 {ilist[i]}")
         await asyncio.sleep(1)
 
     await event.reply(f"ＳＣＯＲＥＣＡＲＤ\n\n🅣🅗🅘🅢 🅞🅥🅔🅡: {sa} RUN")
 
-    flogic(random.randint(6, 23))
 
 # ================== START ==================
 print("🤖 BOT RUNNING")
 client.start()
 client.run_until_disconnected()
+
 
 
 
