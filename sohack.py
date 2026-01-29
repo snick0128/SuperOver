@@ -73,26 +73,48 @@ async def is_admin(event):
 def generate_fixed_over(target):
     balls = []
     remaining = target
+    legal_balls = 0
 
-    while len(balls) < 6:
-        options = ["⚾️ Bowled", "⚾️ Run out"]
+    while legal_balls < 6:
+        # If we still need runs, allow extras
+        options = ["⚾️ Wide", "⚾️ No ball"]
 
-        if remaining >= 6: options.append("⚾️ 6 run")
-        if remaining >= 4: options.append("⚾️ 4 run")
-        if remaining >= 3: options.append("⚾️ 3 run")
-        if remaining >= 2: options.append("⚾️ 2 run")
-        if remaining >= 1: options.append("⚾️ 1 run")
+        if remaining >= 6:
+            options.append("⚾️ 6 run")
+        if remaining >= 4:
+            options.append("⚾️ 4 run")
+        if remaining >= 3:
+            options.append("⚾️ 3 run")
+        if remaining >= 2:
+            options.append("⚾️ 2 run")
+        if remaining >= 1:
+            options.append("⚾️ 1 run")
+
+        # allow wicket only if we still have room
+        if legal_balls < 5:
+            options += ["⚾️ Bowled", "⚾️ Run out"]
 
         outcome = random.choice(options)
         balls.append(outcome)
 
+        # runs
         if "1 run" in outcome: remaining -= 1
         elif "2 run" in outcome: remaining -= 2
         elif "3 run" in outcome: remaining -= 3
         elif "4 run" in outcome: remaining -= 4
         elif "6 run" in outcome: remaining -= 6
+        elif "Wide" in outcome or "No ball" in outcome: remaining -= 1
+
+        # legal delivery check
+        if "Wide" not in outcome and "No ball" not in outcome:
+            legal_balls += 1
+
+        # safety fallback
+        if remaining <= 0 and legal_balls >= 6:
+            break
 
     return balls
+
 
 def run_value(ball):
     if "1 run" in ball: return 1
@@ -207,3 +229,4 @@ else:
 
 client.start()
 client.run_until_disconnected()
+
