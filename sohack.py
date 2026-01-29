@@ -76,44 +76,67 @@ def generate_fixed_over(target):
     legal_balls = 0
 
     while legal_balls < 6:
-        # If we still need runs, allow extras
-        options = ["⚾️ Wide", "⚾️ No ball"]
+        balls_left = 6 - legal_balls
+        max_possible = balls_left * 6
 
-        if remaining >= 6:
-            options.append("⚾️ 6 run")
-        if remaining >= 4:
-            options.append("⚾️ 4 run")
-        if remaining >= 3:
-            options.append("⚾️ 3 run")
-        if remaining >= 2:
-            options.append("⚾️ 2 run")
-        if remaining >= 1:
-            options.append("⚾️ 1 run")
+        # 🔒 force sixes if required
+        if remaining == max_possible:
+            balls.append("⚾️ 6 run")
+            remaining -= 6
+            legal_balls += 1
+            continue
 
-        # allow wicket only if we still have room
-        if legal_balls < 5:
+        options = []
+
+        # scoring shots (only if still reachable)
+        for r, label in [
+            (6, "⚾️ 6 run"),
+            (4, "⚾️ 4 run"),
+            (3, "⚾️ 3 run"),
+            (2, "⚾️ 2 run"),
+            (1, "⚾️ 1 run"),
+        ]:
+            if remaining - r >= 0 and remaining - r <= (balls_left - 1) * 6:
+                options.append(label)
+
+        # extras (+1 run, no legal ball)
+        if remaining - 1 >= 0 and remaining - 1 <= max_possible:
+            options += ["⚾️ Wide", "⚾️ No ball"]
+
+        # wickets only if safe
+        if remaining <= (balls_left - 1) * 6:
             options += ["⚾️ Bowled", "⚾️ Run out"]
+
+        # absolute safety fallback
+        if not options:
+            options.append("⚾️ 6 run")
 
         outcome = random.choice(options)
         balls.append(outcome)
 
-        # runs
-        if "1 run" in outcome: remaining -= 1
-        elif "2 run" in outcome: remaining -= 2
-        elif "3 run" in outcome: remaining -= 3
-        elif "4 run" in outcome: remaining -= 4
-        elif "6 run" in outcome: remaining -= 6
-        elif "Wide" in outcome or "No ball" in outcome: remaining -= 1
-
-        # legal delivery check
-        if "Wide" not in outcome and "No ball" not in outcome:
+        # apply runs
+        if "6 run" in outcome:
+            remaining -= 6
+            legal_balls += 1
+        elif "4 run" in outcome:
+            remaining -= 4
+            legal_balls += 1
+        elif "3 run" in outcome:
+            remaining -= 3
+            legal_balls += 1
+        elif "2 run" in outcome:
+            remaining -= 2
+            legal_balls += 1
+        elif "1 run" in outcome:
+            remaining -= 1
+            legal_balls += 1
+        elif "Wide" in outcome or "No ball" in outcome:
+            remaining -= 1
+        else:  # wicket
             legal_balls += 1
 
-        # safety fallback
-        if remaining <= 0 and legal_balls >= 6:
-            break
-
     return balls
+
 
 
 def run_value(ball):
@@ -229,4 +252,5 @@ else:
 
 client.start()
 client.run_until_disconnected()
+
 
