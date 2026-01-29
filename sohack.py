@@ -124,7 +124,7 @@ async def play_over(event):
     random.shuffle(ilist)
 
     for i in range(6):
-        await event.reply(f"𝐁𝐚𝐥𝐥 0.{i+1} 🎾 {ilist[i]}")
+        await event.reply(f"𝐁𝐚𝐥𝐥 0.{i+1} {ilist[i]}")
         await asyncio.sleep(1)
 
     await event.reply(f"ＳＣＯＲＥＣＡＲＤ\n\n🅣🅗🅘🅢 🅞🅥🅔🅡: {sa} RUN")
@@ -134,6 +134,7 @@ async def play_over(event):
 print("🤖 BOT RUNNING")
 client.start()
 client.run_until_disconnected()
+
 
 
 
