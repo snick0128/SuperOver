@@ -172,5 +172,6 @@ if JOINED_GROUPS:
         print(f"• {data['title']} | {cid} | {data['link']}")
 else:
     print("\n📋 No stored groups yet")
-
+client.start()
 client.run_until_disconnected()
+
