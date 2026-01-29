@@ -1,8 +1,9 @@
 from telethon import TelegramClient, events
 from telethon.tl.types import ChannelParticipantsAdmins
 import random
-import time
 import asyncio
+import json
+import os
 from itertools import combinations_with_replacement
 
 # ================== TELEGRAM CONFIG ==================
@@ -13,20 +14,31 @@ SESSION = "akki"
 client = TelegramClient(SESSION, API_ID, API_HASH)
 
 SUPERADMIN_ID = 5600587227
-ADMIN_CACHE = {}  # chat_id -> set(admin_ids)
+ADMIN_CACHE = {}
+
+# ================== STORAGE ==================
+GROUP_FILE = "joined_groups.json"
+
+def load_groups():
+    if os.path.exists(GROUP_FILE):
+        with open(GROUP_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_groups():
+    with open(GROUP_FILE, "w") as f:
+        json.dump(JOINED_GROUPS, f, indent=2)
+
+JOINED_GROUPS = load_groups()
 
 # ================== SCORE DATA ==================
-score = ["⚾️ Bowled","⚾️ 2 run","⚾️ 1 run","⚾️ Run out","⚾️ 4 run","⚾️ 6 run","⚾️ 3 run"]
+score = ["⚾️ Bowled","⚾️ 1 run","⚾️ 2 run","⚾️ 3 run","⚾️ 4 run","⚾️ 6 run","⚾️ Run out"]
 rscore = score + ["⚾️ Wide","⚾️ No ball"]
 score2 = ["⚾️ 2 run","⚾️ 4 run","⚾️ 6 run","⚾️ 3 run","⚾️ Wide"]
 score3 = score + ["⚾️ Wide"]
 
 all_lst = [rscore, score2, score3]
 list_to_use = all_lst[0]
-
-tosso = ["Heads", "Tails"]
-allto = [tosso, ["Heads"], ["Tails"]]
-list_use = allto[0]
 
 ilist = []
 sa = random.randint(6, 23)
@@ -37,14 +49,11 @@ async def get_admins(chat_id):
         return ADMIN_CACHE[chat_id]
 
     admins = {SUPERADMIN_ID}
-
     try:
-        async for user in client.iter_participants(
-            chat_id, filter=ChannelParticipantsAdmins
-        ):
+        async for user in client.iter_participants(chat_id, filter=ChannelParticipantsAdmins):
             admins.add(user.id)
     except:
-        pass  # bot may not have permission
+        pass
 
     ADMIN_CACHE[chat_id] = admins
     return admins
@@ -54,15 +63,15 @@ async def is_admin(event):
     return event.sender_id in admins
 
 # ================== GAME LOGIC ==================
-def run():
-    return random.choice(list_to_use)
-
 def flogic(num):
     ilist.clear()
     Flist = {
-        0:["⚾️ Bowled","⚾️ Run out"],
-        1:"⚾️ 1 run",2:"⚾️ 2 run",3:"⚾️ 3 run",
-        4:"⚾️ 4 run",6:"⚾️ 6 run"
+        0: ["⚾️ Bowled", "⚾️ Run out"],
+        1: "⚾️ 1 run",
+        2: "⚾️ 2 run",
+        3: "⚾️ 3 run",
+        4: "⚾️ 4 run",
+        6: "⚾️ 6 run"
     }
 
     combos = [
@@ -70,7 +79,7 @@ def flogic(num):
         if sum(c) == num
     ]
 
-    # ✅ fallback if no valid fixed over exists
+    # fallback → random over
     if not combos:
         for _ in range(6):
             ilist.append(random.choice(list_to_use))
@@ -79,88 +88,89 @@ def flogic(num):
     for x in random.choice(combos):
         ilist.append(random.choice(Flist[x]) if x == 0 else Flist[x])
 
-# ================== Joined Chats ==================
-async def log_joined_chats():
-    print("\n📋 BOT JOINED CHATS:\n")
+def calculate_runs(balls):
+    total = 0
+    for b in balls:
+        if "1 run" in b: total += 1
+        elif "2 run" in b: total += 2
+        elif "3 run" in b: total += 3
+        elif "4 run" in b: total += 4
+        elif "6 run" in b: total += 6
+    return total
 
-    async for dialog in client.iter_dialogs():
-        entity = dialog.entity
+# ================== TRACK GROUP JOIN / LEAVE ==================
+@client.on(events.ChatAction)
+async def track_bot_chats(event):
+    me = await client.get_me()
 
-        if dialog.is_group or dialog.is_channel:
-            title = dialog.name
-            chat_id = entity.id
+    if event.user_added or event.user_joined:
+        if event.user_id == me.id:
+            chat = await event.get_chat()
+            title = getattr(chat, "title", "Unknown")
+            chat_id = str(chat.id)
+            link = f"https://t.me/{chat.username}" if getattr(chat, "username", None) else "PRIVATE"
 
-            # public link if exists
-            if getattr(entity, "username", None):
-                link = f"https://t.me/{entity.username}"
-            else:
-                link = "🔒 Private / No public link"
+            JOINED_GROUPS[chat_id] = {
+                "title": title,
+                "link": link
+            }
+            save_groups()
 
-            print(f"• {title}")
-            print(f"  ID   : {chat_id}")
-            print(f"  LINK : {link}\n")
+            print("\n➕ BOT ADDED")
+            print(title, chat_id, link)
 
-    print("✅ CHAT LIST LOGGED\n")
+    if event.user_left:
+        if event.user_id == me.id:
+            chat = await event.get_chat()
+            JOINED_GROUPS.pop(str(chat.id), None)
+            save_groups()
 
+            print("\n➖ BOT REMOVED")
+            print(getattr(chat, "title", "Unknown"))
 
 # ================== COMMANDS ==================
-@client.on(events.NewMessage(pattern='(?i)/set .+'))
-async def set_score(event):
-    global list_to_use
-    if not await is_admin(event): return
-    list_to_use = all_lst[int(event.text.split()[1])]
-    await event.reply("✅ SCORE MODE CHANGED")
-
-@client.on(events.NewMessage(pattern='(?i)/do .+'))
-async def set_toss(event):
-    global list_use
-    if not await is_admin(event): return
-    list_use = allto[int(event.text.split()[1])]
-    await event.reply("✅ TOSS MODE CHANGED")
-
-@client.on(events.NewMessage(pattern=r'(?i)/toss'))
-async def toss(event):
-    if await is_admin(event):
-        await event.reply(random.choice(list_use))
-
 @client.on(events.NewMessage(pattern=r'(?i)/ball'))
 async def ball(event):
     if not await is_admin(event): return
     await event.reply(random.choice(ilist) if ilist else random.choice(list_to_use))
 
-@client.on(events.NewMessage(pattern='(?i)/fix .+'))
+@client.on(events.NewMessage(pattern=r'(?i)/fix .+'))
 async def fix_over(event):
     global sa
     if not await is_admin(event): return
-    sa = int(event.text.split()[1]) or random.randint(6, 23)
+    try:
+        sa = int(event.text.split()[1])
+    except:
+        sa = random.randint(6, 23)
+
     flogic(sa)
-    await event.reply("✅ OVER FIXED")
+    await event.reply(f"✅ OVER FIXED ({sa} RUNS)")
 
 @client.on(events.NewMessage(pattern=r'(?i)/over'))
 async def play_over(event):
-    if not await is_admin(event):
-        return
+    if not await is_admin(event): return
 
     if len(ilist) < 6:
         flogic(random.randint(6, 23))
 
     random.shuffle(ilist)
+    balls = ilist[:6]
 
     for i in range(6):
-        await event.reply(f"𝐁𝐚𝐥𝐥 0.{i+1} {ilist[i]}")
+        await event.reply(f"𝐁𝐚𝐥𝐥 0.{i+1} 🎾 {balls[i]}")
         await asyncio.sleep(1)
 
-    await event.reply(f"ＳＣＯＲＥＣＡＲＤ\n\n🅣🅗🅘🅢 🅞🅥🅔🅡: {sa} RUN")
-
+    runs = calculate_runs(balls)
+    await event.reply(f"📊 SCORECARD\n\nTHIS OVER: {runs} RUNS")
 
 # ================== START ==================
 print("🤖 BOT RUNNING")
-with client:
-    client.loop.run_until_complete(log_joined_chats())
-    client.run_until_disconnected()
 
+if JOINED_GROUPS:
+    print("\n📋 KNOWN GROUPS:")
+    for cid, data in JOINED_GROUPS.items():
+        print(f"• {data['title']} | {cid} | {data['link']}")
+else:
+    print("\n📋 No stored groups yet")
 
-
-
-
-
+client.run_until_disconnected()
